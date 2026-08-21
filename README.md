@@ -148,16 +148,36 @@ were. Re-run it only to update the hook scripts.
 
 Emitted verbatim, so keep it short.
 
+Two sections, because they're two different problems:
+
 ```
+# Code
+
 Comment blocks: 7 words or fewer.
 Function names: 4 words or fewer.
 User-facing strings: 10 words or fewer.
 Active voice. No stage performances.
 Pick the most common word when choosing among alternatives.
 Justify every comment. Delete it if it restates the code.
+
+# Replies
+
+Lead with the answer. No preamble, no restating the question.
+Bullets over paragraphs. One idea per bullet, one line each.
+Under 150 words unless asked for depth.
+No recap of what you just did. Name changed files, skip the narration.
+Cut hedges: "it's worth noting", "essentially", "I should mention".
+No praise and no apology. Never open with "Great question".
+Plain words: "use" not "utilize", "so" not "therefore", "about" not "regarding".
+State uncertainty once, in a clause. Do not hedge the same point twice.
 ```
 
-Not mine — adapted from [mmastrac](https://news.ycombinator.com/user?id=mmastrac)'s
+Keep both or delete one. The `# Code` rules govern what Claude writes into
+files; they do almost nothing for how it talks to you in chat. If wall-of-text
+replies are your actual complaint, `# Replies` is the half that fixes it.
+
+The `# Code` half isn't mine — adapted from
+[mmastrac](https://news.ycombinator.com/user?id=mmastrac)'s
 [comment](https://news.ycombinator.com/item?id=49389501) on *Claudette: Make
 Claude Stop Talking Like a BuzzFeed Article*:
 
