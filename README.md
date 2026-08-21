@@ -1,12 +1,16 @@
 # personal_stylist
 
-Style rules you give Claude Code at the start of a session lose force as context
-grows. Compliance decays well before compaction — this is drift, not deletion.
-Verbosity rules show it most clearly: comment limits and terseness constraints
-hold for a while, then quietly stop applying.
+You tell Claude to stop writing paragraph-long comments. It stops. Forty turns
+later it's writing paragraph-long comments again.
 
-This is a `UserPromptSubmit` hook that re-emits your rules into context every N
-tokens of growth.
+The rules didn't go anywhere — they're still sitting in CLAUDE.md. They just
+stop landing as the context fills up. I notice it with verbosity rules first:
+word limits on comments, no preamble, active voice. Fine for a while, then
+quietly gone. And it happens well before compaction, so "it got summarized away"
+isn't the explanation.
+
+So this just says it again. It's a `UserPromptSubmit` hook that re-drops your
+style rules into the conversation every 50k tokens.
 
 ## How it works
 
@@ -26,10 +30,35 @@ script exits 0
 turn runs
 ```
 
-The hook runs every turn but prints rarely. It reads the current context size
-from the last assistant turn in the transcript, compares against a per-session
-state file, and stays silent unless the context has grown past the interval.
-The work is a `tail` and a `jq` — a few milliseconds.
+## What the hook does
+
+It runs every turn and prints almost never. The work is a `tail` and a `jq` —
+a few milliseconds.
+
+```
+read session_id + transcript_path from stdin
+          │
+          ▼
+used = token count on the last main-chain assistant turn
+          │
+          ▼
+first time seeing this session? ──yes──▶ save baseline, stay quiet
+          │ no
+          ▼
+context shrank? ──yes───────────────────────────┐
+          │ no                                  │  compaction ate the rules,
+          ▼                                     │  so say them again now
+grown past the interval? ──no──▶ stay quiet     │
+          │ yes                                 │
+          ▼                                     │
+          ◀─────────────────────────────────────┘
+          │
+          ▼
+print preamble + STYLE.md, save the new mark
+```
+
+Every path that isn't the last one exits 0 with empty stdout, which costs
+nothing and leaves the turn untouched.
 
 ## Install
 
