@@ -87,13 +87,31 @@ The default:
 Comment blocks: 7 words or fewer.
 Function names: 4 words or fewer.
 User-facing strings: 10 words or fewer.
-Active voice. No preamble, no recap of what you just did.
-Choose the most common word among alternatives.
+Active voice. No stage performances.
+Pick the most common word when choosing among alternatives.
 Justify every comment. Delete it if it restates the code.
 ```
 
-Word limits do most of the work. Tune from drift you actually observe, not up
-front.
+These aren't mine. They're adapted from [mmastrac](https://news.ycombinator.com/user?id=mmastrac)'s
+[comment](https://news.ycombinator.com/item?id=49389501) on *Claudette: Make
+Claude Stop Talking Like a BuzzFeed Article*:
+
+> I've started giving these instructions and I think I've been much more
+> successful in generating clear output:
+>
+> Comment blocks are <= 7 words, function names <= 4 words. User-facing message
+> strings should be <= 10 words. Use an active voice, no stage performances, and
+> pick the most common word when choosing among alternatives.
+>
+> Limiting the number of words is the strongest factor in cleaning up the
+> output, IMO.
+>
+> For older code I've instructed it to delete all the comments, and then I
+> re-comment it using a new session and these guidelines, asking it to
+> rejustify the need for every comment to itself.
+
+Hard word limits do most of the work — they're checkable in a way that "be
+concise" isn't. Tune from drift you actually observe, not up front.
 
 ## Configuration
 
@@ -144,6 +162,17 @@ Re-injection raises compliance. It doesn't guarantee it. For rules you can
 express as a regex — comments, mainly — a `PostToolUse` check on `Write|Edit`
 catches what still slips through. Worth adding only after you've seen which
 rules those are. Prose verbosity isn't detectable that way.
+
+[vrosas](https://news.ycombinator.com/item?id=49389574), replying to mmastrac
+in the same thread, is where this repo started:
+
+> The problem is, when the context window grows, Claude tends to forget these
+> kinds of rules. It will then do whatever it wants. I had to outright ban
+> comments in the global claude.md, the local claude.md AND write a hook to
+> catch any that still slipped through.
+
+Two copies of the rules and a hook. This is the version where you don't have to
+maintain the copies by hand.
 
 Global only. If a repo needs different rules, add a
 `$CLAUDE_PROJECT_DIR/.claude/STYLE.md` fallback to the hook.
