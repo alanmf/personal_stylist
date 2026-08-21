@@ -67,10 +67,15 @@ read -r last count _ < "$state_file" 2>/dev/null || true
 is_number "$last"  || last=0
 is_number "$count" || count=0
 
-# Fire on enough growth, or when context shrank: compaction just dropped the rules.
-if [ "$used" -ge "$last" ] && [ $((used - last)) -lt "$INTERVAL" ]; then
+# A shrunk context means compaction. The SessionStart hook already re-injected
+# on that event, so re-baseline quietly rather than saying it twice in a row.
+# Escalation restarts because the context is fresh again.
+if [ "$used" -lt "$last" ]; then
+  printf '%s 0\n' "$used" > "$state_file" 2>/dev/null || true
   exit 0
 fi
+
+[ $((used - last)) -ge "$INTERVAL" ] || exit 0
 
 count=$((count + 1))
 

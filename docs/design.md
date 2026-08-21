@@ -1,4 +1,4 @@
-# Style Rule Re-injection Hook
+# Style Rule Injection Hooks
 
 ## Problem
 
@@ -9,12 +9,20 @@ terseness constraints hold for a while, then quietly stop applying.
 
 ## Solution
 
-A `UserPromptSubmit` hook that re-emits a style file into context every N tokens
-of context growth. Rules live in a separate markdown file; the hook is dumb
-plumbing.
+Two hooks over one rules file:
 
-Not a background process — Claude Code runs the hook synchronously on every
-prompt submit and appends its stdout to the context.
+| Hook | Fires | Job |
+|---|---|---|
+| `SessionStart` | startup, resume, clear, compact, fork | Assert the rules before turn 1, and again after compaction |
+| `UserPromptSubmit` | every turn | Re-assert every N tokens of growth |
+
+Not a background process — Claude Code runs hooks synchronously and appends
+their stdout to the context. Both events do this; most others send stdout to
+the debug log instead.
+
+The rules do not go in CLAUDE.md. Instructions there are exactly what decays,
+so putting them there would reproduce the problem the tool exists to solve.
+An import would also mutate a file the user maintains by hand.
 
 ## Components
 
@@ -24,9 +32,18 @@ The rules. Plain markdown, no frontmatter, editable without touching code.
 Everything emitted verbatim. Keep it short — it is re-read many times per
 session.
 
+### `~/.claude/hooks/style-inject-session.sh`
+
+`SessionStart`. Stateless: reads `.source` from stdin to pick a preamble, then
+prints the rules. `jq` is optional — without it the preamble is generic and the
+rules still land.
+
+Because this covers compaction, the drift hook must not also fire on a shrunk
+context, or the two land back to back.
+
 ### `~/.claude/hooks/style-reinject.sh`
 
-Runs every turn. Outputs rarely.
+`UserPromptSubmit`. Runs every turn. Outputs rarely.
 
 Input on stdin (JSON):
 
@@ -45,8 +62,10 @@ Logic:
    interval measures growth from session start, not distance from zero, so a
    large starting context does not trigger an immediate fire.
 4. Decide:
+   - `used < last` → context shrank, so compaction ran and `SessionStart`
+     already re-injected. Re-baseline to `used` with `count` reset to 0 and
+     stay silent. Escalation restarts because the context is fresh.
    - `used - last >= INTERVAL` → fire
-   - `used < last` → fire (context shrank; compaction dropped the rules)
    - otherwise → no output
 5. On fire: print preamble + `STYLE.md`, write `used` and `count+1` back.
 6. Always `exit 0`.
@@ -56,9 +75,17 @@ paths. Every failure is a silent `exit 0`.
 
 ### Settings registration
 
-`~/.claude/settings.json`, sibling to the existing `PreToolUse` block:
+`~/.claude/settings.json`:
 
 ```json
+"SessionStart": [
+  {
+    "matcher": "startup|resume|clear|compact|fork",
+    "hooks": [
+      { "type": "command", "command": "~/.claude/hooks/style-inject-session.sh", "timeout": 10 }
+    ]
+  }
+],
 "UserPromptSubmit": [
   {
     "hooks": [
@@ -68,9 +95,15 @@ paths. Every failure is a silent `exit 0`.
 ]
 ```
 
+The `SessionStart` matcher is required. Omitting it registers a hook that never
+fires, with no error anywhere.
+
 Hook entries merge across settings levels, so this coexists with the
 `security-guidance` plugin's existing `UserPromptSubmit` hook. Multiple hooks
 run in parallel.
+
+Both hook files must be executable. A non-executable hook fails silently — no
+output, no error, and every unit test still passes.
 
 ## Computing context size
 
@@ -142,9 +175,10 @@ Preamble escalates with fire count. Identical repetition becomes wallpaper:
 | Variable | Default | Meaning |
 |---|---|---|
 | `STYLE_REINJECT_INTERVAL` | `50000` | Tokens of growth between fires |
-| `STYLE_REINJECT_FILE` | `~/.claude/STYLE.md` | Rules source |
+| `STYLE_REINJECT_FILE` | `~/.claude/STYLE.md` | Rules source, shared by both hooks |
 | `STYLE_REINJECT_STATE_DIR` | `~/.claude/session-env` | Per-session state |
 | `STYLE_REINJECT_STATE_TTL_DAYS` | `7` | Age at which state files are swept |
+| `STYLE_REINJECT_SCAN_LINES` | `400` | Transcript tail scanned before a full read |
 
 At 50k, a 1M-token session fires roughly 20 times.
 
@@ -174,7 +208,7 @@ find ~/.claude/session-env -name '*.style' -mtime +7 -delete 2>/dev/null
 | `transcript_path` missing or unreadable | Silent `exit 0` |
 | `STYLE.md` missing | Silent `exit 0` |
 | `jq` absent | Silent `exit 0` |
-| Compaction shrinks context | `used < last` → fire, reset |
+| Compaction shrinks context | `used < last` → silent re-baseline; `SessionStart` does the talking |
 | Session resumed | State file persists; picks up where it left off |
 | Malformed JSON on stdin | Silent `exit 0` |
 
@@ -186,12 +220,21 @@ bash test/install.sh      # 18 tests, disposable config dir
 bash test/integration.sh  # end to end, costs API calls
 ```
 
-Unit tests cover the decision logic; `install.sh` covers the settings rewrite.
-Neither proves the output reaches the model, so `integration.sh` puts a canary
-rule in `STYLE.md` and asserts it appears in a real `claude -p` reply. It uses
-`--settings` rather than a throwaway `CLAUDE_CONFIG_DIR`, because credentials
-live in the OS keychain but onboarding state lives in the config dir, and a
-fresh one starts unauthenticated.
+Unit tests run the hooks as programs: synthetic transcripts in, assertions on
+stdout. They prove the hooks compute the right answer. They cannot prove the
+answer reaches Claude — wrong registration, a missing matcher, or a
+non-executable file all pass the unit suite.
+
+`integration.sh` closes that gap. A canary rule goes in `STYLE.md` and the test
+greps the session transcript for it. Each hook is registered alone, or the
+`SessionStart` copy would satisfy the drift phase.
+
+It asserts delivery, never compliance. Whether the model obeys is
+probabilistic — one run refused, treating the canary as a prompt injection.
+
+Use `--settings` rather than a throwaway `CLAUDE_CONFIG_DIR`: credentials live
+in the OS keychain but onboarding state lives in the config dir, so a fresh one
+starts unauthenticated.
 
 Dry run against a real transcript:
 

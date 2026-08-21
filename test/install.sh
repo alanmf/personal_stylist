@@ -31,6 +31,11 @@ entries() {
     "$tmp/settings.json" 2>/dev/null
 }
 
+session_entries() {
+  jq '[.hooks.SessionStart[]?.hooks[]? | select(.command | test("style-inject-session"))] | length' \
+    "$tmp/settings.json" 2>/dev/null
+}
+
 section() { printf '\n-- %s\n' "$1"; }
 
 # ------------------------------------------------------------- fresh install
@@ -39,11 +44,14 @@ section "fresh install"
 fresh
 out=$(bash "$root/install.sh" 2>&1)
 check "exits 0" 0 "$?"
-check "hook copied" yes "$([ -f "$tmp/hooks/style-reinject.sh" ] && echo yes || echo no)"
-check "hook executable" yes "$([ -x "$tmp/hooks/style-reinject.sh" ] && echo yes || echo no)"
+check "drift hook copied" yes "$([ -x "$tmp/hooks/style-reinject.sh" ] && echo yes || echo no)"
+check "session hook copied" yes "$([ -x "$tmp/hooks/style-inject-session.sh" ] && echo yes || echo no)"
 check "STYLE.md created" yes "$([ -f "$tmp/STYLE.md" ] && echo yes || echo no)"
 check "settings.json is valid json" yes "$(jq -e . "$tmp/settings.json" >/dev/null 2>&1 && echo yes || echo no)"
-check "one hook entry registered" 1 "$(entries)"
+check "one UserPromptSubmit entry" 1 "$(entries)"
+check "one SessionStart entry" 1 "$(session_entries)"
+check "SessionStart matches every source" "startup|resume|clear|compact|fork" \
+  "$(jq -r '.hooks.SessionStart[0].matcher' "$tmp/settings.json")"
 check "command is an absolute path" yes \
   "$(jq -r '.hooks.UserPromptSubmit[0].hooks[0].command' "$tmp/settings.json" | grep -q "^/" && echo yes || echo no)"
 
@@ -52,7 +60,8 @@ section "re-running"
 
 bash "$root/install.sh" >/dev/null 2>&1
 bash "$root/install.sh" >/dev/null 2>&1
-check "still exactly one entry after 3 runs" 1 "$(entries)"
+check "still one UserPromptSubmit entry after 3 runs" 1 "$(entries)"
+check "still one SessionStart entry after 3 runs" 1 "$(session_entries)"
 check "backups accumulate" yes \
   "$([ "$(ls "$tmp"/settings.json.bak.* 2>/dev/null | wc -l)" -ge 1 ] && echo yes || echo no)"
 
@@ -60,27 +69,7 @@ printf 'MY OWN RULES\n' > "$tmp/STYLE.md"
 bash "$root/install.sh" >/dev/null 2>&1
 check "existing STYLE.md preserved" "MY OWN RULES" "$(cat "$tmp/STYLE.md")"
 
-check "import added exactly once after 4 runs" 1 \
-  "$(grep -c '^@STYLE\.md$' "$tmp/CLAUDE.md")"
-
-# ---------------------------------------------------------------- CLAUDE.md
-section "CLAUDE.md import"
-
-fresh
-bash "$root/install.sh" >/dev/null 2>&1
-check "creates CLAUDE.md when absent" "@STYLE.md" "$(cat "$tmp/CLAUDE.md")"
-
-fresh
-printf '@OTHER.md\n' > "$tmp/CLAUDE.md"
-bash "$root/install.sh" >/dev/null 2>&1
-check "keeps an existing import" yes "$(grep -q '^@OTHER\.md$' "$tmp/CLAUDE.md" && echo yes || echo no)"
-check "appends ours after it" "@STYLE.md" "$(tail -1 "$tmp/CLAUDE.md")"
-
-fresh
-printf '# My rules\n\nBe terse.' > "$tmp/CLAUDE.md"
-bash "$root/install.sh" >/dev/null 2>&1
-check "does not glue onto an unterminated line" "Be terse." "$(sed -n '3p' "$tmp/CLAUDE.md")"
-check "import lands on its own line" "@STYLE.md" "$(tail -1 "$tmp/CLAUDE.md")"
+check "leaves CLAUDE.md alone" no "$([ -e "$tmp/CLAUDE.md" ] && echo yes || echo no)"
 
 # ------------------------------------------------------ existing settings
 section "existing settings"

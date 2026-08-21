@@ -106,10 +106,19 @@ done
 # ---------------------------------------------------------------- compaction
 section "compaction"
 
+# SessionStart already re-injects on compact, so the drift hook must not say it
+# again on the next prompt. It re-baselines quietly and restarts escalation.
 add_turn "$p" 5000
-check "shrinking context fires" yes "$(fired "$(run s-pre "$p")")"
-add_turn "$p" 5000
-check "no growth after that is silent" no "$(fired "$(run s-pre "$p")")"
+check "shrinking context stays silent" no "$(fired "$(run s-pre "$p")")"
+check "re-baselined to the new size" "5000 0" "$(cat "$tmp/state/s-pre.style")"
+
+add_turn "$p" 6000
+check "small growth after compaction is silent" no "$(fired "$(run s-pre "$p")")"
+
+add_turn "$p" 60000
+out=$(run s-pre "$p")
+check "interval resumes from the new baseline" yes "$(fired "$out")"
+check "escalation restarted" yes "$(has 'remain in effect' "$out")"
 
 # --------------------------------------------------------------- scan window
 section "scan window"
@@ -175,6 +184,51 @@ check "missing style file exits 0" 0 "$?"
 
 check "traversal writes no state outside dir" no \
   "$([ -e "$tmp/escape.style" ] && echo yes || echo no)"
+
+# ------------------------------------------------------- session start hook
+section "session start hook"
+
+session_hook="$root/hooks/style-inject-session.sh"
+
+# A non-executable hook fails silently: Claude Code cannot run it, nothing is
+# injected, and no error surfaces anywhere.
+for h in "$root/hooks/style-reinject.sh" "$session_hook"; do
+  check "$(basename "$h") is executable" yes "$([ -x "$h" ] && echo yes || echo no)"
+  check "$(basename "$h") is executable in git" yes \
+    "$(git -C "$root" ls-files -s "hooks/$(basename "$h")" 2>/dev/null | grep -q '^100755' && echo yes || echo no)"
+done
+sess() { printf '%s' "$1" | bash "$session_hook" 2>/dev/null; }
+sess_status() { printf '%s' "$1" | bash "$session_hook" >/dev/null 2>&1; echo $?; }
+
+out=$(sess '{"source":"startup","session_id":"a"}')
+check "startup emits the rules" yes "$(has 'RULE ONE' "$out")"
+check "startup wraps in a tag" yes "$(has '</style-rules>' "$out")"
+check "startup preamble" yes "$(has 'Style rules for this session' "$out")"
+
+check "compact preamble names compaction" yes \
+  "$(has 'just compacted' "$(sess '{"source":"compact"}')")"
+check "resume preamble" yes "$(has 'Resuming' "$(sess '{"source":"resume"}')")"
+check "fork preamble" yes "$(has 'Resuming' "$(sess '{"source":"fork"}')")"
+check "clear falls back to the default" yes \
+  "$(has 'Style rules for this session' "$(sess '{"source":"clear"}')")"
+
+check "unknown source still emits" yes "$(has 'RULE ONE' "$(sess '{"source":"whatever"}')")"
+check "malformed stdin still emits" yes "$(has 'RULE ONE' "$(sess 'not json')")"
+check "empty stdin still emits" yes "$(has 'RULE ONE' "$(sess '')")"
+
+check "session hook exits 0" 0 "$(sess_status 'not json')"
+
+out=$(STYLE_REINJECT_FILE="$tmp/gone.md" sess '{"source":"startup"}')
+check "missing style file is silent" no "$(fired "$out")"
+STYLE_REINJECT_FILE="$tmp/gone.md" sess_status '{"source":"startup"}' > "$tmp/st"
+check "missing style file exits 0" 0 "$(cat "$tmp/st")"
+
+# jq is optional here: without it the preamble is generic but rules still land.
+mkdir -p "$tmp/nojq"
+printf '#!/bin/sh\nexit 127\n' > "$tmp/nojq/jq"
+chmod +x "$tmp/nojq/jq"
+out=$(PATH="$tmp/nojq:/usr/bin:/bin" bash "$session_hook" <<<'{"source":"compact"}' 2>/dev/null)
+check "works without jq" yes "$(has 'RULE ONE' "$out")"
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
