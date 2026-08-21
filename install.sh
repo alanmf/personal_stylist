@@ -59,45 +59,58 @@ registered() {  # event, command
 
 verb() { [ -e "$1" ] && echo "overwrite" || echo "create"; }
 
+W=62
+line() { printf '%*s\n' "$W" '' | tr ' ' "${1:--}"; }
+short() { case "$1" in "$HOME"/*) printf '~%s' "${1#"$HOME"}" ;; *) printf '%s' "$1" ;; esac; }
+rel() { printf '%s' "${1#"$claude_dir"/}"; }
+
+heading() {  # number, title — paths below are relative to the target
+  local label="  $1  $2 "
+  printf '\n%s%s\n\n' "$label" "$(printf '%*s' $((W - ${#label})) '' | tr ' ' '-')"
+}
+
 show_plan() {
-  printf '\npersonal_stylist\n\n'
-  printf '  target  %s\n\n' "$claude_dir"
+  printf '\n%s\n  personal_stylist\n%s\n\n' "$(line =)" "$(line =)"
+  printf '  installing into   %s\n' "$(short "$claude_dir")"
+  printf '  paths below are relative to it\n'
 
-  printf '  hooks\n'
-  printf '    %-9s %s\n' "$(verb "$hook_dest")" "$hook_dest"
-  printf '    %-9s %s\n' "$(verb "$session_dest")" "$session_dest"
+  heading "1/3" "hooks"
+  printf '    %-10s %s\n' "$(verb "$hook_dest")" "$(rel "$hook_dest")"
+  printf '    %-10s %s\n' "$(verb "$session_dest")" "$(rel "$session_dest")"
 
-  printf '\n  rules\n'
+  heading "2/3" "rules"
   if $keeping_rules; then
-    printf '    %-9s %s (yours, left alone)\n\n' "keep" "$style_dest"
+    printf '    %-10s %s   (yours, left alone)\n' "keep" "$(rel "$style_dest")"
   else
-    printf '    %-9s %s\n' "create" "$style_dest"
-    printf '    %-9s %s\n\n' "from" "$style_src"
+    printf '    %-10s %s\n' "create" "$(rel "$style_dest")"
+    printf '    %-10s %s\n' "from" "$(short "$style_src")"
   fi
 
-  sed 's/^/      | /' "$staged"
+  printf '\n    +%s\n' "$(printf '%*s' $((W - 5)) '' | tr ' ' '-')"
+  sed 's/^/    | /' "$staged"
+  printf '    +%s\n\n' "$(printf '%*s' $((W - 5)) '' | tr ' ' '-')"
 
-  printf '\n    This text is injected verbatim, every time. Short is better.\n'
-  printf '    To change it later, edit the file directly:\n'
-  printf '      $EDITOR %s\n' "$style_dest"
-  printf '    It is read live on every injection. No re-install, no restart.\n'
+  printf '    Injected verbatim, every time. Short is better.\n\n'
+  printf '    Edit later:  $EDITOR %s\n' "$(short "$style_dest")"
+  printf '    Read live on every injection. No re-install, no restart.\n'
 
-  printf '\n  %s\n' "$settings"
+  heading "3/3" "settings.json"
   if [ -f "$settings" ]; then
-    printf '    %-9s %s.bak.<timestamp>\n' "back up" "$settings"
+    printf '    %-10s %s\n' "back up" "$(rel "$settings").bak.<timestamp>"
   else
-    printf '    %-9s %s\n' "create" "$settings"
+    printf '    %-10s %s\n' "create" "$(rel "$settings")"
   fi
   for pair in "UserPromptSubmit:$hook_dest" "SessionStart:$session_dest"; do
     event="${pair%%:*}"; cmd="${pair#*:}"
     if registered "$event" "$cmd"; then
-      printf '    %-9s %s (already registered)\n' "skip" "$event"
+      printf '    %-10s %-18s (already registered)\n' "skip" "$event"
     else
-      printf '    %-9s %s\n' "add" "$event"
+      printf '    %-10s %-18s -> %s\n' "add" "$event" "$(rel "$cmd")"
     fi
   done
 
-  printf '\n  Nothing else is touched. CLAUDE.md is not modified.\n\n'
+  printf '\n%s\n\n' "$(line)"
+  printf '  Nothing else is touched. CLAUDE.md is not modified.\n\n'
 }
 
 if [ -f "$settings" ] && ! jq -e . "$settings" >/dev/null 2>&1; then
@@ -116,17 +129,18 @@ if ! $assume_yes; then
   fi
   while true; do
     if $keeping_rules; then
-      read -r -p "Proceed? [y] install  [e] edit your rules  [N] cancel " reply
+      printf '  [y] install     [e] edit your rules     [N] cancel\n'
     else
-      read -r -p "Proceed? [y] install  [e] edit rules first  [N] cancel " reply
+      printf '  [y] install     [e] edit rules first    [N] cancel\n'
     fi
+    read -r -p "  > " reply
     case "$reply" in
       [yY]|[yY][eE][sS]) echo; break ;;
       [eE])
         "${EDITOR:-vi}" "$staged"
         show_plan
         ;;
-      *) echo "Cancelled. Nothing was changed."; exit 1 ;;
+      *) printf '\n  Cancelled. Nothing was changed.\n\n'; exit 1 ;;
     esac
   done
 fi
@@ -135,13 +149,14 @@ fi
 mkdir -p "$claude_dir/hooks"
 install -m 755 "$src/hooks/style-reinject.sh" "$hook_dest"
 install -m 755 "$src/hooks/style-inject-session.sh" "$session_dest"
-echo "installed both hooks in $claude_dir/hooks"
+printf '  done   %s\n' "$(rel "$hook_dest")"
+printf '  done   %s\n' "$(rel "$session_dest")"
 
 if $keeping_rules; then
-  echo "kept your $style_dest"
+  printf '  kept   %s\n' "$(rel "$style_dest")"
 else
   cp "$staged" "$style_dest"
-  echo "created $style_dest"
+  printf '  done   %s\n' "$(rel "$style_dest")"
 fi
 
 [ -f "$settings" ] || echo '{}' > "$settings"
@@ -164,12 +179,13 @@ jq --arg drift "$hook_dest" --arg start "$session_dest" --arg matcher "$matcher"
 ' "$settings" > "$tmp"
 
 mv "$tmp" "$settings"
-echo "registered SessionStart and UserPromptSubmit in $settings"
-echo "backed up to $backup"
+printf '  done   %s  (SessionStart, UserPromptSubmit)\n' "$(rel "$settings")"
+printf '  saved  %s\n' "$(rel "$backup")"
 
-printf '\nRestart Claude Code to pick up the hooks.\n\n'
-printf 'To change your rules from now on, edit the file:\n'
-printf '  $EDITOR %s\n' "$style_dest"
-printf 'Both hooks read it live, so the next injection picks up your edit.\n'
-printf 'Do not re-run this installer for that: it keeps your rules untouched.\n'
-printf 'Re-run it only to update the hook scripts themselves.\n'
+printf '\n%s\n  next\n%s\n\n' "$(line =)" "$(line =)"
+printf '  1.  Restart Claude Code to pick up the hooks.\n\n'
+printf '  2.  To change your rules from now on, edit the file:\n\n'
+printf '        $EDITOR %s\n\n' "$(short "$style_dest")"
+printf '      Both hooks read it live, so the next injection uses your edit.\n'
+printf '      Do not re-run this installer for that: it keeps your rules\n'
+printf '      untouched. Re-run it only to update the hook scripts.\n\n'

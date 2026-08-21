@@ -70,38 +70,49 @@ cd personal_stylist
 It prints exactly what it will do and waits for you before touching anything:
 
 ```
-personal_stylist
+==============================================================
+  personal_stylist
+==============================================================
 
-  target  /Users/you/.claude
+  installing into   ~/.claude
+  paths below are relative to it
 
-  hooks
-    create    /Users/you/.claude/hooks/style-reinject.sh
-    create    /Users/you/.claude/hooks/style-inject-session.sh
+  1/3  hooks -------------------------------------------------
 
-  rules
-    create    /Users/you/.claude/STYLE.md
-    from      ./STYLE.md
+    create     hooks/style-reinject.sh
+    create     hooks/style-inject-session.sh
 
-      | Comment blocks: 7 words or fewer.
-      | Function names: 4 words or fewer.
-      | User-facing strings: 10 words or fewer.
-      | Active voice. No stage performances.
-      | Pick the most common word when choosing among alternatives.
-      | Justify every comment. Delete it if it restates the code.
+  2/3  rules -------------------------------------------------
 
-    This text is injected verbatim, every time. Short is better.
-    To change it later, edit the file directly:
-      $EDITOR /Users/you/.claude/STYLE.md
-    It is read live on every injection. No re-install, no restart.
+    create     STYLE.md
+    from       ~/src/personal_stylist/STYLE.md
 
-  /Users/you/.claude/settings.json
-    back up   /Users/you/.claude/settings.json.bak.<timestamp>
-    add       UserPromptSubmit
-    add       SessionStart
+    +---------------------------------------------------------
+    | Comment blocks: 7 words or fewer.
+    | Function names: 4 words or fewer.
+    | User-facing strings: 10 words or fewer.
+    | Active voice. No stage performances.
+    | Pick the most common word when choosing among alternatives.
+    | Justify every comment. Delete it if it restates the code.
+    +---------------------------------------------------------
+
+    Injected verbatim, every time. Short is better.
+
+    Edit later:  $EDITOR ~/.claude/STYLE.md
+    Read live on every injection. No re-install, no restart.
+
+  3/3  settings.json -----------------------------------------
+
+    create     settings.json
+    add        UserPromptSubmit   -> hooks/style-reinject.sh
+    add        SessionStart       -> hooks/style-inject-session.sh
+
+--------------------------------------------------------------
 
   Nothing else is touched. CLAUDE.md is not modified.
 
-Proceed? [y] install  [e] edit rules first  [N] cancel
+  [y] install     [e] edit rules first    [N] cancel
+  >
 ```
 
 You see the rules before they're installed, because they're the whole point.

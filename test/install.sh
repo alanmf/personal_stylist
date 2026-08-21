@@ -148,8 +148,9 @@ fresh
 plan=$(bash "$root/install.sh" --dry-run 2>&1)
 check "plan shows the rules themselves" yes \
   "$(grep -q 'Comment blocks: 7 words or fewer' <<<"$plan" && echo yes || echo no)"
+# Paths are shortened with ~, so match the tail rather than the absolute path.
 check "plan says where they come from" yes \
-  "$(grep -q "from .*$root/STYLE.md" <<<"$plan" && echo yes || echo no)"
+  "$(grep -q "from .*$(basename "$root")/STYLE.md" <<<"$plan" && echo yes || echo no)"
 check "plan says how to change them later" yes \
   "$(grep -q 'EDITOR .*STYLE.md' <<<"$plan" && echo yes || echo no)"
 check "plan says rules are read live" yes \
