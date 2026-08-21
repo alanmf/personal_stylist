@@ -12,7 +12,7 @@ Justify every comment. Delete it if it restates the code.
 Lead with the answer. No preamble, no restating the question.
 Bullets over paragraphs. One idea per bullet, one line each.
 Under 150 words unless asked for depth.
-No recap of what you just did. Name changed files, skip the narration.
+Recap only when it helps. Then bullets, 10 words or fewer each.
 Cut hedges: "it's worth noting", "essentially", "I should mention".
 No praise and no apology. Never open with "Great question".
 Plain words: "use" not "utilize", "so" not "therefore", "about" not "regarding".
