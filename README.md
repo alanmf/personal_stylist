@@ -90,7 +90,9 @@ personal_stylist
       | Justify every comment. Delete it if it restates the code.
 
     This text is injected verbatim, every time. Short is better.
-    Change it later with: $EDITOR /Users/you/.claude/STYLE.md
+    To change it later, edit the file directly:
+      $EDITOR /Users/you/.claude/STYLE.md
+    It is read live on every injection. No re-install, no restart.
 
   /Users/you/.claude/settings.json
     back up   /Users/you/.claude/settings.json.bak.<timestamp>
