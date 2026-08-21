@@ -67,11 +67,36 @@ cd personal_stylist
 ./install.sh
 ```
 
-Copies both hooks to `~/.claude/hooks/`, drops `STYLE.md` at `~/.claude/` if
-you don't have one, and registers both events in `~/.claude/settings.json`.
+It prints exactly what it will do and waits for you before touching anything:
+
+```
+personal_stylist
+
+  target  /Users/you/.claude
+
+  hooks
+    create    /Users/you/.claude/hooks/style-reinject.sh
+    create    /Users/you/.claude/hooks/style-inject-session.sh
+
+  rules
+    create    /Users/you/.claude/STYLE.md
+
+  /Users/you/.claude/settings.json
+    back up   /Users/you/.claude/settings.json.bak.<timestamp>
+    add       UserPromptSubmit
+    add       SessionStart
+
+  Nothing else is touched. CLAUDE.md is not modified.
+
+Proceed? [y/N]
+```
+
+Re-run it and the plan says `skip (already registered)` and `keep` for a
+`STYLE.md` you've edited. `--dry-run` prints the plan and stops; `--yes` skips
+the prompt. Without a terminal it refuses rather than assuming consent.
+
 Settings are backed up first and hook entries merge across levels, so anything
-already registered keeps working. Re-running is safe. Restart Claude Code
-afterward.
+already registered keeps working. Restart Claude Code afterward.
 
 ## Your rules
 
@@ -116,7 +141,7 @@ Set these in the `env` block of `~/.claude/settings.json`.
 
 ```bash
 bash test/run.sh          # 58 unit tests, instant, free
-bash test/install.sh      # 22 tests, disposable config dir
+bash test/install.sh      # 33 tests, disposable config dir
 bash test/integration.sh  # 10 end-to-end, real API calls
 ```
 
