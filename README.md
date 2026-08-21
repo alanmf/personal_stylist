@@ -80,6 +80,17 @@ personal_stylist
 
   rules
     create    /Users/you/.claude/STYLE.md
+    from      ./STYLE.md
+
+      | Comment blocks: 7 words or fewer.
+      | Function names: 4 words or fewer.
+      | User-facing strings: 10 words or fewer.
+      | Active voice. No stage performances.
+      | Pick the most common word when choosing among alternatives.
+      | Justify every comment. Delete it if it restates the code.
+
+    This text is injected verbatim, every time. Short is better.
+    Change it later with: $EDITOR /Users/you/.claude/STYLE.md
 
   /Users/you/.claude/settings.json
     back up   /Users/you/.claude/settings.json.bak.<timestamp>
@@ -88,15 +99,25 @@ personal_stylist
 
   Nothing else is touched. CLAUDE.md is not modified.
 
-Proceed? [y/N]
+Proceed? [y] install  [e] edit rules first  [N] cancel
 ```
 
-Re-run it and the plan says `skip (already registered)` and `keep` for a
-`STYLE.md` you've edited. `--dry-run` prints the plan and stops; `--yes` skips
-the prompt. Without a terminal it refuses rather than assuming consent.
+You see the rules before they're installed, because they're the whole point.
+Press `e` to open them in `$EDITOR`; the plan re-renders with your version and
+asks again. Nothing is written until you say `y`.
 
-Settings are backed up first and hook entries merge across levels, so anything
-already registered keeps working. Restart Claude Code afterward.
+Already have a `~/.claude/STYLE.md`? The plan shows *that* one and marks it
+`keep (yours, left alone)`. Re-runs say `skip (already registered)`.
+
+| Flag | |
+|---|---|
+| `--style-file PATH` | Install rules from your own file |
+| `--dry-run` | Print the plan and stop |
+| `--yes` | Skip the prompt |
+
+Without a terminal it refuses rather than assuming consent. Settings are backed
+up first and hook entries merge across levels, so anything already registered
+keeps working. Restart Claude Code afterward.
 
 ## Your rules
 
@@ -141,7 +162,7 @@ Set these in the `env` block of `~/.claude/settings.json`.
 
 ```bash
 bash test/run.sh          # 58 unit tests, instant, free
-bash test/install.sh      # 33 tests, disposable config dir
+bash test/install.sh      # 47 tests, disposable config dir
 bash test/integration.sh  # 10 end-to-end, real API calls
 ```
 

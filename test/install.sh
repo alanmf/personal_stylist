@@ -141,6 +141,67 @@ check "unknown option exits 2" 2 "$?"
 check "help mentions the flags" yes \
   "$(bash "$root/install.sh" --help 2>&1 | grep -q -- '--dry-run' && echo yes || echo no)"
 
+# -------------------------------------------------------------- rules preview
+section "rules preview"
+
+fresh
+plan=$(bash "$root/install.sh" --dry-run 2>&1)
+check "plan shows the rules themselves" yes \
+  "$(grep -q 'Comment blocks: 7 words or fewer' <<<"$plan" && echo yes || echo no)"
+check "plan says where they come from" yes \
+  "$(grep -q "from .*$root/STYLE.md" <<<"$plan" && echo yes || echo no)"
+check "plan says how to change them later" yes \
+  "$(grep -q 'EDITOR .*STYLE.md' <<<"$plan" && echo yes || echo no)"
+
+printf 'Only one rule: be brief.\n' > "$tmp/mine.md"
+plan=$(bash "$root/install.sh" --dry-run --style-file "$tmp/mine.md" 2>&1)
+check "--style-file previews that file" yes \
+  "$(grep -q 'Only one rule: be brief' <<<"$plan" && echo yes || echo no)"
+check "--style-file default not shown" no \
+  "$(grep -q 'Comment blocks' <<<"$plan" && echo yes || echo no)"
+
+bash "$root/install.sh" --yes --style-file "$tmp/mine.md" >/dev/null 2>&1
+check "--style-file installs that file" "Only one rule: be brief." "$(cat "$tmp/STYLE.md")"
+
+bash "$root/install.sh" --style-file "$tmp/nope.md" >/dev/null 2>&1
+check "--style-file rejects a missing path" 2 "$?"
+
+bash "$root/install.sh" --style-file >/dev/null 2>&1
+check "--style-file requires an argument" 2 "$?"
+
+fresh
+plan=$(printf 'x\n' > "$tmp/STYLE.md"; bash "$root/install.sh" --dry-run 2>&1)
+check "an existing STYLE.md is previewed, not the default" no \
+  "$(grep -q 'Comment blocks' <<<"$plan" && echo yes || echo no)"
+check "and marked as yours" yes \
+  "$(grep -q 'yours, left alone' <<<"$plan" && echo yes || echo no)"
+
+# ------------------------------------------------------------ interactive
+if command -v script >/dev/null 2>&1; then
+  section "interactive prompt"
+
+  editor="$tmp/fake-editor"
+
+  fresh
+  mkdir -p "$(dirname "$editor")"
+  printf '#!/bin/sh\nprintf "EDITED RULE ONLY\\n" > "$1"\n' > "$editor"
+  chmod +x "$editor"
+
+  # Input is paced: a pty drops keystrokes queued before the prompt renders.
+  out=$( (printf 'e\n'; sleep 1; printf 'y\n'; sleep 1) \
+    | EDITOR="$editor" script -q /dev/null bash "$root/install.sh" 2>&1 )
+  check "edit re-renders the plan with new rules" yes \
+    "$(grep -q 'EDITED RULE ONLY' <<<"$out" && echo yes || echo no)"
+  check "edit then install writes the edited rules" "EDITED RULE ONLY" \
+    "$(cat "$tmp/STYLE.md" 2>/dev/null)"
+
+  fresh
+  out=$( (printf 'n\n'; sleep 1) | script -q /dev/null bash "$root/install.sh" 2>&1 )
+  check "declining changes nothing" 0 "$(ls -A "$tmp" | wc -l | tr -d ' ')"
+  check "declining says so" yes \
+    "$(grep -q 'Nothing was changed' <<<"$out" && echo yes || echo no)"
+fi
+
 rm -rf "$tmp"
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
