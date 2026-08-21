@@ -78,7 +78,9 @@ show_plan() {
   sed 's/^/      | /' "$staged"
 
   printf '\n    This text is injected verbatim, every time. Short is better.\n'
-  printf '    Change it later with: $EDITOR %s\n' "$style_dest"
+  printf '    To change it later, edit the file directly:\n'
+  printf '      $EDITOR %s\n' "$style_dest"
+  printf '    It is read live on every injection. No re-install, no restart.\n'
 
   printf '\n  %s\n' "$settings"
   if [ -f "$settings" ]; then
@@ -165,5 +167,9 @@ mv "$tmp" "$settings"
 echo "registered SessionStart and UserPromptSubmit in $settings"
 echo "backed up to $backup"
 
-printf '\nRestart Claude Code to pick up the hooks.\n'
-printf 'Edit your rules any time: $EDITOR %s\n' "$style_dest"
+printf '\nRestart Claude Code to pick up the hooks.\n\n'
+printf 'To change your rules from now on, edit the file:\n'
+printf '  $EDITOR %s\n' "$style_dest"
+printf 'Both hooks read it live, so the next injection picks up your edit.\n'
+printf 'Do not re-run this installer for that: it keeps your rules untouched.\n'
+printf 'Re-run it only to update the hook scripts themselves.\n'

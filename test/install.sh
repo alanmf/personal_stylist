@@ -152,6 +152,8 @@ check "plan says where they come from" yes \
   "$(grep -q "from .*$root/STYLE.md" <<<"$plan" && echo yes || echo no)"
 check "plan says how to change them later" yes \
   "$(grep -q 'EDITOR .*STYLE.md' <<<"$plan" && echo yes || echo no)"
+check "plan says rules are read live" yes \
+  "$(grep -q 'No re-install, no restart' <<<"$plan" && echo yes || echo no)"
 
 printf 'Only one rule: be brief.\n' > "$tmp/mine.md"
 plan=$(bash "$root/install.sh" --dry-run --style-file "$tmp/mine.md" 2>&1)
@@ -175,6 +177,21 @@ check "an existing STYLE.md is previewed, not the default" no \
   "$(grep -q 'Comment blocks' <<<"$plan" && echo yes || echo no)"
 check "and marked as yours" yes \
   "$(grep -q 'yours, left alone' <<<"$plan" && echo yes || echo no)"
+
+fresh
+done_msg=$(bash "$root/install.sh" --yes 2>&1)
+check "post-install points at the file" yes \
+  "$(grep -q 'EDITOR .*STYLE.md' <<<"$done_msg" && echo yes || echo no)"
+check "post-install warns off re-running" yes \
+  "$(grep -q 'Do not re-run this installer' <<<"$done_msg" && echo yes || echo no)"
+
+# Editing the rules must take effect with no re-install: the hooks read the
+# file at injection time rather than caching it.
+printf 'BRAND NEW RULE\n' > "$tmp/STYLE.md"
+out=$(printf '{"source":"startup"}' | STYLE_REINJECT_FILE="$tmp/STYLE.md" \
+  bash "$tmp/hooks/style-inject-session.sh" 2>/dev/null)
+check "edited rules are picked up without re-installing" yes \
+  "$(grep -q 'BRAND NEW RULE' <<<"$out" && echo yes || echo no)"
 
 # ------------------------------------------------------------ interactive
 if command -v script >/dev/null 2>&1; then

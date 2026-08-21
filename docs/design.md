@@ -32,6 +32,11 @@ The rules. Plain markdown, no frontmatter, editable without touching code.
 Everything emitted verbatim. Keep it short — it is re-read many times per
 session.
 
+Both hooks `cat` this file at injection time rather than caching it, so editing
+it takes effect on the next fire: no re-install, no restart, mid-session
+included. `install.sh` keeps an existing copy, so re-running it is a no-op for
+rules and is only for updating the hook scripts.
+
 ### `~/.claude/hooks/style-inject-session.sh`
 
 `SessionStart`. Stateless: reads `.source` from stdin to pick a preamble, then

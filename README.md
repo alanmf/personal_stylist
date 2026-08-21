@@ -121,7 +121,19 @@ keeps working. Restart Claude Code afterward.
 
 ## Your rules
 
-Edit `~/.claude/STYLE.md`. Emitted verbatim, so keep it short.
+Edit `~/.claude/STYLE.md`. That's the whole workflow:
+
+```bash
+$EDITOR ~/.claude/STYLE.md
+```
+
+**Don't re-run `install.sh` to change your rules.** Both hooks `cat` that file
+at injection time, so an edit takes effect on the next fire — no re-install, no
+restart, mid-session included. And the installer deliberately *keeps* an
+existing `STYLE.md`, so re-running it would leave your rules exactly as they
+were. Re-run it only to update the hook scripts.
+
+Emitted verbatim, so keep it short.
 
 ```
 Comment blocks: 7 words or fewer.
@@ -162,7 +174,7 @@ Set these in the `env` block of `~/.claude/settings.json`.
 
 ```bash
 bash test/run.sh          # 58 unit tests, instant, free
-bash test/install.sh      # 47 tests, disposable config dir
+bash test/install.sh      # 51 tests, disposable config dir
 bash test/integration.sh  # 10 end-to-end, real API calls
 ```
 
