@@ -60,6 +60,28 @@ printf 'MY OWN RULES\n' > "$tmp/STYLE.md"
 bash "$root/install.sh" >/dev/null 2>&1
 check "existing STYLE.md preserved" "MY OWN RULES" "$(cat "$tmp/STYLE.md")"
 
+check "import added exactly once after 4 runs" 1 \
+  "$(grep -c '^@STYLE\.md$' "$tmp/CLAUDE.md")"
+
+# ---------------------------------------------------------------- CLAUDE.md
+section "CLAUDE.md import"
+
+fresh
+bash "$root/install.sh" >/dev/null 2>&1
+check "creates CLAUDE.md when absent" "@STYLE.md" "$(cat "$tmp/CLAUDE.md")"
+
+fresh
+printf '@OTHER.md\n' > "$tmp/CLAUDE.md"
+bash "$root/install.sh" >/dev/null 2>&1
+check "keeps an existing import" yes "$(grep -q '^@OTHER\.md$' "$tmp/CLAUDE.md" && echo yes || echo no)"
+check "appends ours after it" "@STYLE.md" "$(tail -1 "$tmp/CLAUDE.md")"
+
+fresh
+printf '# My rules\n\nBe terse.' > "$tmp/CLAUDE.md"
+bash "$root/install.sh" >/dev/null 2>&1
+check "does not glue onto an unterminated line" "Be terse." "$(sed -n '3p' "$tmp/CLAUDE.md")"
+check "import lands on its own line" "@STYLE.md" "$(tail -1 "$tmp/CLAUDE.md")"
+
 # ------------------------------------------------------ existing settings
 section "existing settings"
 

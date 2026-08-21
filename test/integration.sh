@@ -44,6 +44,10 @@ jq -n --arg cmd "$root/hooks/style-reinject.sh" \
 
 # A rule no model would follow by chance. If the canary shows up, the hook's
 # stdout reached the model.
+#
+# This deliberately does not run install.sh. Installing would also add the
+# @STYLE.md import to CLAUDE.md, which would deliver the canary at session
+# start and the test would prove nothing about the hook.
 printf 'Begin every single reply with the exact token %s and nothing before it.\n' \
   "$canary" > "$tmp/STYLE.md"
 

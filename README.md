@@ -68,13 +68,29 @@ cd personal_stylist
 ./install.sh
 ```
 
-This copies the hook to `~/.claude/hooks/`, copies `STYLE.md` to `~/.claude/`
-if you don't already have one, and adds a `UserPromptSubmit` entry to
-`~/.claude/settings.json`. Existing settings are backed up first, and hook
-entries merge across settings levels, so anything already registered keeps
-working.
+That does four things:
+
+1. Copies the hook to `~/.claude/hooks/`.
+2. Copies `STYLE.md` to `~/.claude/`, unless you already have one.
+3. Adds `@STYLE.md` to `~/.claude/CLAUDE.md`.
+4. Registers the hook in `~/.claude/settings.json`.
+
+Existing settings are backed up first, and hook entries merge across settings
+levels, so anything already registered keeps working. Re-running is safe.
 
 Restart Claude Code afterward.
+
+### Why step 3 matters
+
+The hook only *re*-asserts. Something has to assert the rules in the first
+place, or they're absent from turn 1 until the first fire 50k tokens later —
+which would make this a tool that reminds you of rules you never gave.
+
+The `@STYLE.md` import in CLAUDE.md is that first assertion. One file, two
+delivery points: CLAUDE.md puts it in context at session start, the hook puts
+it back as that copy loses its grip.
+
+If you'd rather wire it up yourself, skip `install.sh` and add the line by hand.
 
 ## Your rules
 

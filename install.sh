@@ -22,6 +22,17 @@ else
   echo "created $style_dest"
 fi
 
+# The hook only re-asserts. Something has to assert the rules in the first
+# place, or they are absent until the first fire. CLAUDE.md imports handle it.
+claude_md="$claude_dir/CLAUDE.md"
+if [ -f "$claude_md" ] && grep -q '^@STYLE\.md[[:space:]]*$' "$claude_md"; then
+  echo "kept existing @STYLE.md import in $claude_md"
+else
+  [ ! -s "$claude_md" ] || printf '\n' >> "$claude_md"
+  printf '@STYLE.md\n' >> "$claude_md"
+  echo "added @STYLE.md import to $claude_md"
+fi
+
 [ -f "$settings" ] || echo '{}' > "$settings"
 cp "$settings" "$settings.bak.$(date +%Y%m%d%H%M%S)"
 
