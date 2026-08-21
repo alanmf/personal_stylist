@@ -1,2 +1,4 @@
 test/tmp/
+test/tmp-install/
+test/tmp-e2e/
 .DS_Store

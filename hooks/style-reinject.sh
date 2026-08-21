@@ -8,6 +8,7 @@ STYLE_FILE="${STYLE_REINJECT_FILE:-$HOME/.claude/STYLE.md}"
 INTERVAL="${STYLE_REINJECT_INTERVAL:-50000}"
 STATE_DIR="${STYLE_REINJECT_STATE_DIR:-$HOME/.claude/session-env}"
 STATE_TTL_DAYS="${STYLE_REINJECT_STATE_TTL_DAYS:-7}"
+SCAN_LINES="${STYLE_REINJECT_SCAN_LINES:-400}"
 
 command -v jq >/dev/null 2>&1 || exit 0
 [ -r "$STYLE_FILE" ] || exit 0
@@ -24,21 +25,30 @@ case "$session_id" in
   */*|..*|"") exit 0 ;;
 esac
 
-# Current context size is the last main-chain assistant turn's usage.
+# Context size is the last main-chain assistant turn's usage.
 # -R plus fromjson? tolerates the partial line tail can slice.
-# isSidechain entries are subagent turns and do not reflect main context.
-used=$(tail -n 400 "$transcript" 2>/dev/null | jq -R -r '
-  fromjson?
-  | select(.type == "assistant" and .isSidechain != true)
-  | .message.usage // empty
-  | (.input_tokens // 0)
-  + (.cache_creation_input_tokens // 0)
-  + (.cache_read_input_tokens // 0)
-' 2>/dev/null | tail -n 1)
+# isSidechain guards against subagent turns being counted as main context.
+extract_usage() {
+  jq -R -r '
+    fromjson?
+    | select(.type == "assistant" and .isSidechain != true)
+    | .message.usage // empty
+    | (.input_tokens // 0)
+    + (.cache_creation_input_tokens // 0)
+    + (.cache_read_input_tokens // 0)
+  ' 2>/dev/null | tail -n 1
+}
 
-case "$used" in
-  ''|*[!0-9]*) exit 0 ;;
-esac
+is_number() {
+  case "${1:-}" in ''|*[!0-9]*) return 1 ;; *) return 0 ;; esac
+}
+
+# Scanning the tail keeps the common case cheap. Long runs of tool results can
+# push the last usage entry out of that window, so fall back to a full scan
+# rather than going permanently silent.
+used=$(tail -n "$SCAN_LINES" "$transcript" 2>/dev/null | extract_usage)
+is_number "$used" || used=$(extract_usage < "$transcript")
+is_number "$used" || exit 0
 
 state_file="$STATE_DIR/${session_id}.style"
 
@@ -54,8 +64,8 @@ fi
 last=0
 count=0
 read -r last count _ < "$state_file" 2>/dev/null || true
-case "$last"  in ''|*[!0-9]*) last=0  ;; esac
-case "$count" in ''|*[!0-9]*) count=0 ;; esac
+is_number "$last"  || last=0
+is_number "$count" || count=0
 
 # Fire on enough growth, or when context shrank: compaction just dropped the rules.
 if [ "$used" -ge "$last" ] && [ $((used - last)) -lt "$INTERVAL" ]; then

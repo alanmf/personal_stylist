@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Test the re-injection hook against synthetic transcripts.
+# Unit tests. Synthetic transcripts, no network, no API calls.
+# End-to-end coverage lives in test/integration.sh.
 
 set -uo pipefail
 
@@ -33,89 +34,147 @@ check() {
 # Append an assistant turn carrying the given cache_read token count.
 add_turn() {
   local file="$1" tokens="$2" sidechain="${3:-false}"
-  printf '{"type":"assistant","isSidechain":%s,"message":{"usage":{"input_tokens":2,"cache_creation_input_tokens":0,"cache_read_input_tokens":%s}}}\n' \
+  printf '{"type":"assistant","isSidechain":%s,"message":{"usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":%s}}}\n' \
     "$sidechain" "$tokens" >> "$file"
 }
 
 run() {
-  local session="$1" transcript="$2"
-  printf '{"session_id":"%s","transcript_path":"%s"}' "$session" "$transcript" | bash "$hook"
+  printf '{"session_id":"%s","transcript_path":"%s"}' "$1" "$2" | bash "$hook" 2>/dev/null
+}
+
+status_of() {
+  printf '%s' "$1" | bash "$hook" >/dev/null 2>&1
+  echo $?
 }
 
 fired() { [ -n "$1" ] && echo yes || echo no; }
+has() { grep -q "$1" <<<"$2" && echo yes || echo no; }
 
-# --- no assistant turns yet -------------------------------------------------
+section() { printf '\n-- %s\n' "$1"; }
+
+# ---------------------------------------------------------------- fire logic
+section "fire logic"
+
 : > "$tmp/empty.jsonl"
-out=$(run s-empty "$tmp/empty.jsonl")
-check "silent with no assistant turns" no "$(fired "$out")"
+check "silent with no assistant turns" no "$(fired "$(run s-empty "$tmp/empty.jsonl")")"
 
-# --- baseline, growth, and firing -------------------------------------------
 t="$tmp/main.jsonl"
 : > "$t"
 add_turn "$t" 20000
-out=$(run s-main "$t")
-check "first sighting is silent" no "$(fired "$out")"
-check "baseline recorded" "20002 0" "$(cat "$tmp/state/s-main.style")"
+check "first sighting is silent" no "$(fired "$(run s-main "$t")")"
+check "baseline recorded" "20000 0" "$(cat "$tmp/state/s-main.style")"
 
 add_turn "$t" 50000
-out=$(run s-main "$t")
-check "below interval is silent" no "$(fired "$out")"
+check "below interval is silent" no "$(fired "$(run s-main "$t")")"
 
 add_turn "$t" 80000
 out=$(run s-main "$t")
-check "at interval it fires" yes "$(fired "$out")"
-check "emits the rules" yes "$(echo "$out" | grep -q 'RULE ONE' && echo yes || echo no)"
-check "wraps in a tag" yes "$(echo "$out" | grep -q '</style-rules>' && echo yes || echo no)"
-check "first preamble" yes "$(echo "$out" | grep -q 'remain in effect' && echo yes || echo no)"
+check "past interval it fires" yes "$(fired "$out")"
+check "emits the rules" yes "$(has 'RULE ONE' "$out")"
+check "wraps in a tag" yes "$(has '</style-rules>' "$out")"
+check "state advances on fire" "80000 1" "$(cat "$tmp/state/s-main.style")"
 
-add_turn "$t" 140000
-out=$(run s-main "$t")
-check "second preamble" yes "$(echo "$out" | grep -q 'still in effect' && echo yes || echo no)"
+# ------------------------------------------------------------- interval edge
+section "interval boundary"
 
-add_turn "$t" 200000
-out=$(run s-main "$t")
-check "third preamble escalates" yes "$(echo "$out" | grep -q 'drifting' && echo yes || echo no)"
+for d in 49999 50000 50001; do
+  f="$tmp/edge-$d.jsonl"; : > "$f"
+  add_turn "$f" 0
+  run "e$d" "$f" > /dev/null
+  add_turn "$f" "$d"
+  want=$([ "$d" -ge 50000 ] && echo yes || echo no)
+  check "growth of exactly $d" "$want" "$(fired "$(run "e$d" "$f")")"
+done
 
-# --- compaction shrinks the context -----------------------------------------
-add_turn "$t" 30000
-out=$(run s-main "$t")
-check "shrinking context fires" yes "$(fired "$out")"
+# ------------------------------------------------------------ preamble tiers
+section "preamble escalation"
 
-# --- sidechain turns are ignored --------------------------------------------
-t2="$tmp/side.jsonl"
-: > "$t2"
-add_turn "$t2" 10000
-run s-side "$t2" > /dev/null
-add_turn "$t2" 900000 true
-out=$(run s-side "$t2")
-check "sidechain usage ignored" no "$(fired "$out")"
+p="$tmp/pre.jsonl"; : > "$p"
+add_turn "$p" 0
+run s-pre "$p" > /dev/null
+for n in 1 2 3 4; do
+  add_turn "$p" $((n * 60000))
+  out=$(run s-pre "$p")
+  case "$n" in
+    1) want='remain in effect' ;;
+    2) want='still in effect' ;;
+    *) want='drifting' ;;
+  esac
+  check "fire $n uses '$want'" yes "$(has "$want" "$out")"
+done
 
-# --- a partial trailing line does not break parsing --------------------------
-t3="$tmp/partial.jsonl"
-: > "$t3"
-add_turn "$t3" 10000
-run s-partial "$t3" > /dev/null
-add_turn "$t3" 70000
-printf '{"type":"assistant","message":{"usa' >> "$t3"
-out=$(run s-partial "$t3")
-check "tolerates partial line" yes "$(fired "$out")"
+# ---------------------------------------------------------------- compaction
+section "compaction"
 
-# --- missing and malformed inputs stay silent --------------------------------
-out=$(STYLE_REINJECT_FILE="$tmp/nope.md" run s-nofile "$t")
+add_turn "$p" 5000
+check "shrinking context fires" yes "$(fired "$(run s-pre "$p")")"
+add_turn "$p" 5000
+check "no growth after that is silent" no "$(fired "$(run s-pre "$p")")"
+
+# --------------------------------------------------------------- scan window
+section "scan window"
+
+d="$tmp/deep.jsonl"; : > "$d"
+add_turn "$d" 0
+run s-deep "$d" > /dev/null
+add_turn "$d" 99999
+for _ in $(seq 1 600); do
+  printf '{"type":"user","message":{"content":"tool result"}}\n' >> "$d"
+done
+check "usage beyond the tail window still found" yes "$(fired "$(run s-deep "$d")")"
+
+n="$tmp/none.jsonl"
+for _ in $(seq 1 600); do
+  printf '{"type":"user","message":{"content":"x"}}\n' >> "$n"
+done
+check "no usage anywhere is silent" no "$(fired "$(run s-none "$n")")"
+
+# ---------------------------------------------------------------- robustness
+section "robustness"
+
+s="$tmp/side.jsonl"; : > "$s"
+add_turn "$s" 10000
+run s-side "$s" > /dev/null
+add_turn "$s" 900000 true
+check "sidechain turns are not counted" no "$(fired "$(run s-side "$s")")"
+
+r="$tmp/partial.jsonl"; : > "$r"
+add_turn "$r" 10000
+run s-partial "$r" > /dev/null
+add_turn "$r" 70000
+printf '{"type":"assistant","message":{"usa' >> "$r"
+check "tolerates a partial trailing line" yes "$(fired "$(run s-partial "$r")")"
+
+c="$tmp/corrupt.jsonl"; : > "$c"
+add_turn "$c" 10000
+run s-corrupt "$c" > /dev/null
+printf 'garbage not numbers\n' > "$tmp/state/s-corrupt.style"
+add_turn "$c" 70000
+check "recovers from a corrupt state file" yes "$(fired "$(run s-corrupt "$c")")"
+
+# ------------------------------------------------------ silent failure paths
+section "failure paths stay silent and exit 0"
+
+while IFS='|' read -r name payload; do
+  [ -n "$name" ] || continue
+  check "$name is silent" no "$(fired "$(printf '%s' "$payload" | bash "$hook" 2>/dev/null)")"
+  check "$name exits 0" 0 "$(status_of "$payload")"
+done <<EOF
+missing transcript|{"session_id":"a","transcript_path":"$tmp/nope.jsonl"}
+malformed stdin|not json at all
+empty object|{}
+no session_id|{"transcript_path":"$t"}
+path traversal|{"session_id":"../escape","transcript_path":"$t"}
+nested path|{"session_id":"a/b","transcript_path":"$t"}
+EOF
+
+out=$(STYLE_REINJECT_FILE="$tmp/gone.md" run s-nofile "$t")
 check "missing style file is silent" no "$(fired "$out")"
+STYLE_REINJECT_FILE="$tmp/gone.md" run s-nofile "$t" >/dev/null 2>&1
+check "missing style file exits 0" 0 "$?"
 
-out=$(run s-notrans "$tmp/does-not-exist.jsonl")
-check "missing transcript is silent" no "$(fired "$out")"
-
-out=$(printf 'not json' | bash "$hook")
-check "malformed stdin is silent" no "$(fired "$out")"
-
-out=$(run "../escape" "$t")
-check "path traversal rejected" no "$(fired "$out")"
-
-# --- exit code is always zero ------------------------------------------------
-printf 'not json' | bash "$hook" > /dev/null
-check "exit zero on bad input" 0 "$?"
+check "traversal writes no state outside dir" no \
+  "$([ -e "$tmp/escape.style" ] && echo yes || echo no)"
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

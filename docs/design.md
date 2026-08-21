@@ -87,9 +87,18 @@ Two things are easy to get wrong here:
   and `fromjson` receives an object instead of a string. The `?` then swallows
   the type error and the pipeline silently yields nothing. Paired with `-R`,
   `fromjson?` also skips the partial line `tail` may slice.
-- **Sidechain entries must be filtered.** Subagent turns carry their own
-  `usage`, which does not reflect main-chain context. A single subagent turn
-  would otherwise be read as the session's context size.
+- **Sidechain entries are filtered defensively.** Subagent turns carry their
+  own `usage`, which would not reflect main-chain context. As of Claude Code
+  2.1.224 they never appear in the main transcript — subagents get their own
+  directory, and all 46,101 entries sampled from local transcripts are
+  `isSidechain: false` or `null`. The filter costs nothing and guards against
+  that changing.
+
+The tail window is an optimisation, not a bound. If more than `SCAN_LINES` go
+by without a usage-bearing entry, fall back to a full scan. Without that, the
+hook goes permanently silent for the session with no error. Measured worst case
+in real transcripts is a 41-line gap against a 400-line window, so the fallback
+is rare, but the failure it prevents is invisible.
 
 ```bash
 used=$(tail -n 400 "$transcript" 2>/dev/null | jq -R -r '
@@ -156,8 +165,10 @@ find ~/.claude/session-env -name '*.style' -mtime +7 -delete 2>/dev/null
 
 | Case | Behavior |
 |---|---|
-| New session, no assistant turns | Silent `exit 0`. CLAUDE.md already covers session start. |
-| First turn with usage | Baseline only, no fire |
+| Prompt 1, no assistant turn yet | Silent `exit 0`, no baseline written |
+| Prompt 2, first usage visible | Baseline only, no fire |
+| Prompt 3 | Earliest possible fire, even at interval 0 |
+| Usage entry beyond `SCAN_LINES` | Full-file fallback scan |
 | Sidechain (subagent) turns | Filtered out; they are not main-chain context |
 | `session_id` containing `/` or `..` | Silent `exit 0` |
 | `transcript_path` missing or unreadable | Silent `exit 0` |
@@ -170,11 +181,17 @@ find ~/.claude/session-env -name '*.style' -mtime +7 -delete 2>/dev/null
 ## Testing
 
 ```bash
-bash test/run.sh
+bash test/run.sh          # 37 unit tests
+bash test/install.sh      # 18 tests, disposable config dir
+bash test/integration.sh  # end to end, costs API calls
 ```
 
-Synthetic transcripts covering baselines, intervals, escalation, compaction,
-subagent turns, partial lines, and every silent-failure path.
+Unit tests cover the decision logic; `install.sh` covers the settings rewrite.
+Neither proves the output reaches the model, so `integration.sh` puts a canary
+rule in `STYLE.md` and asserts it appears in a real `claude -p` reply. It uses
+`--settings` rather than a throwaway `CLAUDE_CONFIG_DIR`, because credentials
+live in the OS keychain but onboarding state lives in the config dir, and a
+fresh one starts unauthenticated.
 
 Dry run against a real transcript:
 

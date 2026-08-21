@@ -121,6 +121,7 @@ concise" isn't. Tune from drift you actually observe, not up front.
 | `STYLE_REINJECT_FILE` | `~/.claude/STYLE.md` | Rules source |
 | `STYLE_REINJECT_STATE_DIR` | `~/.claude/session-env` | Per-session state |
 | `STYLE_REINJECT_STATE_TTL_DAYS` | `7` | Age at which state files are swept |
+| `STYLE_REINJECT_SCAN_LINES` | `400` | Transcript tail scanned before falling back to a full read |
 
 At 50k, a 1M-token session fires roughly 20 times.
 
@@ -131,8 +132,15 @@ Set these in the `env` block of `~/.claude/settings.json`.
 **Absolute tokens, not percentage.** No need to detect the context window size,
 and drift tracks tokens elapsed rather than proportion of window.
 
-**The first turn only sets a baseline.** The interval measures growth from
-session start, so a large starting context doesn't trigger an immediate fire.
+**It takes three prompts before it can fire at all.** The hook runs before the
+model replies, so on prompt one there's no usage to read and no baseline gets
+written. Prompt two sets the baseline. Prompt three is the earliest a fire is
+possible, even at a zero interval. Irrelevant at the default 50k — you won't
+grow that much in two turns — but it's why the end-to-end test uses three.
+
+**The baseline is the session's starting size, not zero.** The interval
+measures growth from there, so a large starting context doesn't trigger an
+immediate fire.
 
 **A shrinking context fires immediately.** Compaction just summarized your rules
 away, which is the one moment they're certain to be gone.
@@ -150,11 +158,31 @@ stdin — is a silent success.
 ## Tests
 
 ```bash
-bash test/run.sh
+bash test/run.sh        # 37 unit tests, no network
+bash test/install.sh    # 18 tests, throwaway CLAUDE_CONFIG_DIR
+bash test/integration.sh  # end to end, costs API calls
 ```
 
-Synthetic transcripts covering baselines, intervals, escalation, compaction,
-subagent turns, partial lines, and every silent-failure path.
+`run.sh` covers the decision logic against synthetic transcripts: baselines,
+the exact interval boundary, preamble escalation, compaction, the scan-window
+fallback, partial lines, corrupt state, and every silent-failure path including
+its exit code.
+
+`install.sh` runs against a disposable config dir and checks idempotency, that
+unrelated settings and other people's hooks survive, that an existing STYLE.md
+is preserved, and that a malformed settings.json aborts without damage.
+
+`integration.sh` is the one that matters. It puts a canary rule in STYLE.md —
+*"begin every reply with PS-CANARY-1234567890"* — runs three real `claude -p`
+turns, and checks the canary appears in the third. Nothing else proves the
+hook's stdout reached the model rather than just landing on stdout. It uses
+your real config dir for auth, overriding only settings, rules, state, and cwd.
+
+**Known gap:** the `isSidechain` filter is defensive but currently unexercised
+by reality. In Claude Code 2.1.224, subagent turns get their own transcript
+directory and never appear in the main file — across 46,101 entries in local
+transcripts, every one is `false` or `null`. The filter is insurance against
+that changing; its test uses a fabricated fixture.
 
 ## Limits
 
