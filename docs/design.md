@@ -244,7 +244,7 @@ starts unauthenticated.
 Dry run against a real transcript:
 
 ```bash
-echo '{"session_id":"test","transcript_path":"~/.claude/projects/<project-slug>/<id>.jsonl"}' \
+echo '{"session_id":"test","transcript_path":"~/.claude/projects/<project-slug>/<session-id>.jsonl"}' \
   | ~/.claude/hooks/style-reinject.sh
 ```
 
