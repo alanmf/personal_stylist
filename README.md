@@ -67,83 +67,18 @@ cd personal_stylist
 ./install.sh
 ```
 
-It prints exactly what it will do and waits for you before touching anything:
+It shows a plan, previews the rules it would install, and waits. Press `e` to
+edit them first. Nothing is written until you confirm.
 
-```
-==============================================================
-  personal_stylist
-==============================================================
-
-  installing into   ~/.claude
-  paths below are relative to it
-
-  1/3  hooks -------------------------------------------------
-
-    create     hooks/style-reinject.sh
-    create     hooks/style-inject-session.sh
-
-  2/3  rules -------------------------------------------------
-
-    create     STYLE.md
-    from       ~/src/personal_stylist/STYLE.md
-
-    +---------------------------------------------------------
-    | # Code
-    |
-    | Comment blocks: 7 words or fewer.
-    | Function names: 4 words or fewer.
-    | User-facing strings: 10 words or fewer.
-    | Active voice. No stage performances.
-    | Pick the most common word when choosing among alternatives.
-    | Justify every comment. Delete it if it restates the code.
-    |
-    | # Replies
-    |
-    | Lead with the answer. No preamble, no restating the question.
-    | Bullets over paragraphs. One idea per bullet, one line each.
-    | Under 150 words unless asked for depth.
-    | Recap only when it helps. Then bullets, 10 words or fewer each.
-    | Cut hedges: "it's worth noting", "essentially", "I should mention".
-    | No praise and no apology. Never open with "Great question".
-    | Plain words: "use" not "utilize", "so" not "therefore", "about" not "regarding".
-    | State uncertainty once, in a clause. Do not hedge the same point twice.
-    +---------------------------------------------------------
-
-    Injected verbatim, every time. Short is better.
-
-    Edit later:  $EDITOR ~/.claude/STYLE.md
-    Read live on every injection. No re-install, no restart.
-
-  3/3  settings.json -----------------------------------------
-
-    create     settings.json
-    add        UserPromptSubmit   -> hooks/style-reinject.sh
-    add        SessionStart       -> hooks/style-inject-session.sh
-
---------------------------------------------------------------
-
-  Nothing else is touched. CLAUDE.md is not modified.
-
-  [y] install     [e] edit rules first    [N] cancel
-  >
-```
-
-You see the rules before they're installed, because they're the whole point.
-Press `e` to open them in `$EDITOR`; the plan re-renders with your version and
-asks again. Nothing is written until you say `y`.
-
-Already have a `~/.claude/STYLE.md`? The plan shows *that* one and marks it
-`keep (yours, left alone)`. Re-runs say `skip (already registered)`.
+An existing `~/.claude/STYLE.md` is left alone, settings are backed up, and hook
+entries merge across levels — so anything already registered keeps working.
+Re-running is safe. Restart Claude Code afterward.
 
 | Flag | |
 |---|---|
 | `--style-file PATH` | Install rules from your own file |
 | `--dry-run` | Print the plan and stop |
 | `--yes` | Skip the prompt |
-
-Without a terminal it refuses rather than assuming consent. Settings are backed
-up first and hook entries merge across levels, so anything already registered
-keeps working. Restart Claude Code afterward.
 
 ## Your rules
 
@@ -219,42 +154,9 @@ Set these in the `env` block of `~/.claude/settings.json`.
 ## Tests
 
 ```bash
-bash test/run.sh          # 58 unit tests, instant, free
-bash test/install.sh      # 51 tests, disposable config dir
-bash test/integration.sh  # 10 end-to-end, real API calls
+bash test/run.sh && bash test/install.sh   # unit, no network
+bash test/integration.sh                  # end to end, real API calls
 ```
-
-**Unit tests run the hooks as programs.** Synthetic transcripts on stdin,
-assertions on stdout. They cover the decision logic — the interval boundary,
-escalation, compaction, the scan-window fallback, corrupt state, every
-silent-failure path and its exit code — plus `install.sh` against a throwaway
-`CLAUDE_CONFIG_DIR`. Fast, deterministic, and they prove the hooks compute the
-right answer.
-
-**They cannot prove the answer reaches Claude.** A hook that writes perfect
-output to stdout is still useless if it's registered wrong, if the event never
-fires, or if the file isn't executable. Every one of those passes the unit
-suite.
-
-**Integration tests run real `claude -p` turns.** A canary rule goes in
-`STYLE.md` — *"begin every reply with PS-CANARY-1234567890"* — and the test
-greps the session transcript for it. Each hook is registered alone, since
-installing both would let the `SessionStart` copy satisfy the drift phase and
-prove nothing.
-
-It asserts **delivery**, not compliance. Whether the model then obeys is
-probabilistic — in one run it refused, calling the canary a prompt-injection
-attempt. Compliance is printed for interest and never fails the suite; a red
-test there would say nothing about the code.
-
-This split earned its keep: `style-inject-session.sh` shipped mode 644 and
-silently never ran. 58 unit tests were green. The integration test caught it,
-and there's now a unit test for the executable bit too.
-
-**Known gap:** the `isSidechain` filter is unexercised by reality. In Claude
-Code 2.1.224 subagent turns get their own transcript directory — across 46,101
-local entries, every one is `false` or `null`. It's insurance; its test uses a
-fabricated fixture.
 
 ## Limits
 
