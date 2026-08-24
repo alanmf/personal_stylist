@@ -8,6 +8,9 @@ set -uo pipefail
 STYLE_FILE="${STYLE_REINJECT_FILE:-$HOME/.claude/STYLE.md}"
 
 [ -r "$STYLE_FILE" ] || exit 0
+# An empty rules file means off. Injecting a rules block with no rules
+# in it is a directive that says nothing.
+grep -q "[^[:space:]]" "$STYLE_FILE" 2>/dev/null || exit 0
 
 payload=$(cat)
 

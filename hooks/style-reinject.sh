@@ -12,6 +12,9 @@ SCAN_LINES="${STYLE_REINJECT_SCAN_LINES:-400}"
 
 command -v jq >/dev/null 2>&1 || exit 0
 [ -r "$STYLE_FILE" ] || exit 0
+# An empty rules file means off. Injecting a rules block with no rules
+# in it is a directive that says nothing.
+grep -q "[^[:space:]]" "$STYLE_FILE" 2>/dev/null || exit 0
 
 payload=$(cat)
 session_id=$(printf '%s' "$payload" | jq -r '.session_id // empty' 2>/dev/null)

@@ -220,6 +220,16 @@ check "session hook exits 0" 0 "$(sess_status 'not json')"
 
 out=$(STYLE_REINJECT_FILE="$tmp/gone.md" sess '{"source":"startup"}')
 check "missing style file is silent" no "$(fired "$out")"
+
+# Emptying the file is the obvious way to switch this off.
+: > "$tmp/empty.md"
+printf '  \n\n\t\n' > "$tmp/ws.md"
+for f in empty ws; do
+  check "$f rules file is off, not an empty block" no \
+    "$(fired "$(STYLE_REINJECT_FILE="$tmp/$f.md" sess '{"source":"startup"}')")"
+  check "$f rules file is off for the drift hook" no \
+    "$(fired "$(STYLE_REINJECT_FILE="$tmp/$f.md" run s-main "$t")")"
+done
 STYLE_REINJECT_FILE="$tmp/gone.md" sess_status '{"source":"startup"}' > "$tmp/st"
 check "missing style file exits 0" 0 "$(cat "$tmp/st")"
 

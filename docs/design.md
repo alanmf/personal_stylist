@@ -212,6 +212,7 @@ find ~/.claude/session-env -name '*.style' -mtime +7 -delete 2>/dev/null
 | `session_id` containing `/` or `..` | Silent `exit 0` |
 | `transcript_path` missing or unreadable | Silent `exit 0` |
 | `STYLE.md` missing | Silent `exit 0` |
+| `STYLE.md` empty or whitespace | Silent `exit 0` — this is the off switch |
 | `jq` absent | Silent `exit 0` |
 | Compaction shrinks context | `used < last` → silent re-baseline; `SessionStart` does the talking |
 | Session resumed | State file persists; picks up where it left off |

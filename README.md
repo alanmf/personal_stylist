@@ -96,6 +96,10 @@ were. Re-run it only to update the hook scripts.
 
 Emitted verbatim, so keep it short.
 
+To switch it off, empty the file. Both hooks treat a blank `STYLE.md` as off and
+stay silent — no empty rules block, nothing injected. Fill it back in to resume.
+Moving the file aside works too.
+
 Two sections, because they're two different problems:
 
 ```
